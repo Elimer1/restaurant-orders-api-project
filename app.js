@@ -1,6 +1,8 @@
 import express from "express";
 import fs from "fs/promises";
 import { getFile, saveFile } from "./utils.js";
+import { get } from "http";
+import { fileURLToPath } from "url";
 
 const app = express();
 const ORDERS_FILE_PATH = "./orders.json";
@@ -31,6 +33,45 @@ app.post("/orders", async (req, res, next) => {
   return res
     .status(201)
     .json({ success: true, message: "order placed successfully" });
+});
+
+app.get("/orders", async (req, res, next) => {
+  const statuses = ["NEW", "PREPARING", "READY", "DELIVERED", "CANCELLED"];
+  const { statusType, customer, tableNum } = req.query;
+  const orders = await getFile(ORDERS_FILE_PATH);
+
+  const status = statusType ? statusType.toUpperCase() : null;
+  const customerName = customer ? customer.toLowerCase() : null;
+  const tableNumber = tableNum ? Number(tableNum) : null;
+
+  let filteredOrders = orders;
+
+  if (status) {
+    if (!statuses.includes(status)) {
+      const error = new Error("invalid status");
+      error.status = 400;
+      return next(error);
+    }
+    filteredOrders = filteredOrders.filter((order) => order.status === status);
+  }
+  if (customerName) {
+    filteredOrders = filteredOrders.filter(
+      (order) => order.customerName.toLowerCase() === customerName,
+    );
+  }
+
+  if (tableNumber) {
+    if (isNaN(tableNumber)) {
+      const error = new Error("invalid data for table number");
+      error.status = 400;
+      return next(error);
+    }
+    filteredOrders = filteredOrders.filter(
+      (order) => order.tableNumber === tableNumber,
+    );
+  }
+
+  return res.status(200).json({ success: true, data: filteredOrders });
 });
 
 app.use((err, req, res, next) => {
