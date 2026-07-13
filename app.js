@@ -143,8 +143,30 @@ app.patch("/orders/:id/status", (req, res, next) => {
   order.status = newStatus
 
   await saveFile(ORDERS_FILE_PATH, orders);
-  res.status(200).json({success: true, message: "status updated successfully"})
+  return res.status(200).json({success: true, message: "status updated successfully"})
 });
+
+app.delete("/orders/:id", async (req, res, next) => {
+  const orderId = Number(req.params.id);
+
+  if (isNaN(orderId)) {
+    const error = new Error("invalid id");
+    error.status = 400;
+    return next(error);
+  }
+
+  const orders = await getFile(ORDERS_FILE_PATH);
+  const updatedOrders =  orders.filter((order) => order.id !== orderId);
+
+  if (orders.length === updatedOrders.length) {
+    const error = new Error("order not found");
+    error.status = 404;
+    return next(error);
+  }
+
+  await saveFile(ORDERS_FILE_PATH, updatedOrders);
+  return res.status(200).json({success: true, message:"order deleted successfully"})
+})
 
 app.use((err, req, res, next) => {
   console.error(err);
