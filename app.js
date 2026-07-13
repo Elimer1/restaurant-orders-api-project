@@ -11,6 +11,12 @@ const statusTransition = {"NEW" : ["PREPARING", CANCELLED], "PREPARING": ["READY
 
 app.use(express.json());
 
+app.use((req, res, next) => {
+    const timeStamp = new Date().toISOString();
+    console.log(`[${timeStamp}] ${req.method} ${req.url}`);
+    next();
+})
+
 app.post("/orders", async (req, res, next) => {
   const { customerName, tableNumber, status = "NEW" } = req.body;
   const orders = await getFile(ORDERS_FILE_PATH);
