@@ -7,15 +7,31 @@ import { fileURLToPath } from "url";
 const app = express();
 const ORDERS_FILE_PATH = "./orders.json";
 const statuses = ["NEW", "PREPARING", "READY", "DELIVERED", "CANCELLED"];
-const statusTransition = {"NEW" : ["PREPARING", CANCELLED], "PREPARING": ["READY", "CANCELLED"], "READY": ["DELIVERED"]}
+const statusTransition = {
+  NEW: ["PREPARING", "CANCELLED"],
+  PREPARING: ["READY", "CANCELLED"],
+  READY: ["DELIVERED"],
+};
 
 app.use(express.json());
 
 app.use((req, res, next) => {
-    const timeStamp = new Date().toISOString();
-    console.log(`[${timeStamp}] ${req.method} ${req.url}`);
-    next();
-})
+  const timeStamp = new Date().toISOString();
+  console.log(`[${timeStamp}] ${req.method} ${req.url}`);
+  next();
+});
+
+const checkId = (req, res, next) => {
+  const id = Number(req.params.id);
+
+  if (isNaN(id)) {
+    const error = new Error("invalid id");
+    error.status = 400;
+    return next(error);
+  }
+  req.id = id;
+  next();
+};
 
 app.post("/orders", async (req, res, next) => {
   const { customerName, tableNumber, status = "NEW" } = req.body;
@@ -44,7 +60,6 @@ app.post("/orders", async (req, res, next) => {
 });
 
 app.get("/orders", async (req, res, next) => {
-
   const { statusType, customer, tableNum } = req.query;
   const orders = await getFile(ORDERS_FILE_PATH);
 
@@ -82,14 +97,8 @@ app.get("/orders", async (req, res, next) => {
   return res.status(200).json({ success: true, data: filteredOrders });
 });
 
-app.get("/orders/:id", async (req, res, next) => {
-  const orderId = Number(req.params.id);
-
-  if (isNaN(orderId)) {
-    const error = new Error("invalid id");
-    error.status = 400;
-    return next(error);
-  }
+app.get("/orders/:id", checkId, async (req, res, next) => {
+  const orderId = req.id;
 
   const orders = await getFile(ORDERS_FILE_PATH);
   const order = orders.find((order) => order.id === orderId);
@@ -102,32 +111,22 @@ app.get("/orders/:id", async (req, res, next) => {
   res.status(200).json({ success: true, data: order });
 });
 
-app.patch("/orders/:id/status", (req, res, next) => {
-  const orderId = Number(req.params.id);
+app.patch("/orders/:id/status", checkId, async (req, res, next) => {
+  const orderId = req.id;
+  let newStatus = req.body.status;
 
-  if (isNaN(orderId)) {
-    const error = new Error("invalid id");
+  if (newStatus) {
+    newStatus = newStatus.toUpperCase();
+    if (!statuses.includes(newStatus)) {
+      const error = new Error("invalid status to update");
+      error.status = 400;
+      return next(error);
+    }
+  } else {
+    const error = new Error("missing status to update");
     error.status = 400;
     return next(error);
   }
-
-  let newStatus = req.body.status;
-
-  if (newStatus){
-    newStatus = newStatus.toUpperCase()
-      if (!statuses.includes(newStatus)){
-        const error = new Error("invalid status to update");
-        error.status = 400;
-        return next(error);
-      }
-  }
-  else{
-        const error = new Error("missing status to update");
-        error.status = 400;
-        return next(error);
-  }
-
-
 
   const orders = await getFile(ORDERS_FILE_PATH);
   const order = orders.find((order) => order.id === orderId);
@@ -140,29 +139,24 @@ app.patch("/orders/:id/status", (req, res, next) => {
 
   const allowedUpdate = statusTransition[order.status];
 
-  if (!allowedUpdate.includes(newStatus)){
+  if (!allowedUpdate.includes(newStatus)) {
     const error = new Error("invalid status transition");
     error.status = 400;
     return next(error);
   }
 
-  order.status = newStatus
+  order.status = newStatus;
 
   await saveFile(ORDERS_FILE_PATH, orders);
-  return res.status(200).json({success: true, message: "status updated successfully"})
+  return res
+    .status(200)
+    .json({ success: true, message: "status updated successfully" });
 });
 
-app.delete("/orders/:id", async (req, res, next) => {
-  const orderId = Number(req.params.id);
-
-  if (isNaN(orderId)) {
-    const error = new Error("invalid id");
-    error.status = 400;
-    return next(error);
-  }
-
+app.delete("/orders/:id", checkId, async (req, res, next) => {
+  const orderId = req.id;
   const orders = await getFile(ORDERS_FILE_PATH);
-  const updatedOrders =  orders.filter((order) => order.id !== orderId);
+  const updatedOrders = orders.filter((order) => order.id !== orderId);
 
   if (orders.length === updatedOrders.length) {
     const error = new Error("order not found");
@@ -171,8 +165,10 @@ app.delete("/orders/:id", async (req, res, next) => {
   }
 
   await saveFile(ORDERS_FILE_PATH, updatedOrders);
-  return res.status(200).json({success: true, message:"order deleted successfully"})
-})
+  return res
+    .status(200)
+    .json({ success: true, message: "order deleted successfully" });
+});
 
 app.use((err, req, res, next) => {
   console.error(err);
