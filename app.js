@@ -74,6 +74,26 @@ app.get("/orders", async (req, res, next) => {
   return res.status(200).json({ success: true, data: filteredOrders });
 });
 
+app.get("/orders/:id", async (req, res, next) => {
+  const orderId = Number(req.params.id);
+
+  if (isNaN(orderId)) {
+    const error = new Error("invalid id");
+    error.status = 400;
+    return next(error);
+  }
+
+  const orders = await getFile(ORDERS_FILE_PATH);
+  const order = orders.find((order) => order.id === orderId);
+
+  if (!order) {
+    const error = new Error("order not found");
+    error.status = 404;
+    return next(error);
+  }
+  res.status(200).json({ success: true, data: order });
+});
+
 app.use((err, req, res, next) => {
   console.error(err);
   res
